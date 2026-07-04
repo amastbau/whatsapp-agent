@@ -29,20 +29,31 @@ client.on("ready", async () => {
 });
 
 client.on("message_create", async (msg) => {
-  const chat = await msg.getChat();
-  const contact = await msg.getContact();
+  try {
+    const chat = await msg.getChat();
 
-  const messageData = {
-    chatId: chat.id._serialized,
-    chatName: chat.name || chat.id.user,
-    sender: contact.id._serialized,
-    senderName: contact.pushname || contact.name || contact.id.user,
-    body: msg.body,
-    timestamp: msg.timestamp,
-    isGroup: chat.isGroup,
-  };
+    let senderName = "Me";
+    let senderId = msg.from;
+    if (!msg.fromMe) {
+      try {
+        const contact = await msg.getContact();
+        senderId = contact.id._serialized;
+        senderName = contact.pushname || contact.name || contact.id.user;
+      } catch { /* device WID lookup can fail for own messages */ }
+    }
+
+    const messageData = {
+      chatId: chat.id._serialized,
+      chatName: chat.name || chat.id.user,
+      sender: senderId,
+      senderName,
+      body: msg.body,
+      timestamp: msg.timestamp,
+      isGroup: chat.isGroup,
+    };
 
   if (!msg.body || msg.body.trim().length === 0) return;
+  if (msg.fromMe && (msg.body.startsWith("📅") || msg.body.startsWith("⏰") || msg.body.startsWith("📋"))) return;
 
   const rowId = storeMessage(messageData);
   const direction = msg.fromMe ? "→" : "←";
@@ -62,7 +73,10 @@ client.on("message_create", async (msg) => {
     const event = await createEvent(intent.title, intent.datetime, intent.duration_minutes);
     if (event) {
       updateAction(rowId, "calendar_event", intent);
-      notify("📅 Calendar Event Created", `${intent.title}\n${new Date(intent.datetime).toLocaleString("he-IL")}`);
+      const timeStr = new Date(intent.datetime).toLocaleString("he-IL");
+      notify("📅 Calendar Event Created", `${intent.title}\n${timeStr}`);
+      await msg.reply(`📅 נוסף ליומן: ${intent.title}\n🕐 ${timeStr}`);
+      console.log(`[Reply] Calendar confirmation sent`);
     }
   }
 
@@ -70,11 +84,17 @@ client.on("message_create", async (msg) => {
     const delay = new Date(intent.datetime).getTime() - Date.now();
     if (delay > 0) {
       updateAction(rowId, "reminder", intent);
+      const timeStr = new Date(intent.datetime).toLocaleString("he-IL");
       setTimeout(() => {
         notify("⏰ Reminder", intent.title);
       }, delay);
-      notify("Reminder Set", `${intent.title} at ${new Date(intent.datetime).toLocaleString("he-IL")}`);
+      notify("Reminder Set", `${intent.title} at ${timeStr}`);
+      await msg.reply(`⏰ תזכורת נקבעה: ${intent.title}\n🕐 ${timeStr}`);
+      console.log(`[Reply] Reminder confirmation sent`);
     }
+  }
+  } catch (err) {
+    console.error("[Handler] Error processing message:", err.message);
   }
 });
 
