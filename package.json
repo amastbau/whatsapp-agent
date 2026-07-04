@@ -1,0 +1,19 @@
+{
+  "name": "whatsapp-agent",
+  "version": "1.0.0",
+  "description": "Agentic WhatsApp message reader — parses intent via Claude, creates calendar events, sends daily digests",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.110.0",
+    "@anthropic-ai/vertex-sdk": "^0.19.0",
+    "better-sqlite3": "^11.0.0",
+    "googleapis": "^144.0.0",
+    "node-cron": "^3.0.3",
+    "whatsapp-web.js": "^1.26.0",
+    "qrcode-terminal": "^0.12.0"
+  }
+}
