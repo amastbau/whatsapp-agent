@@ -28,9 +28,7 @@ client.on("ready", async () => {
   initDigest(client);
 });
 
-client.on("message", async (msg) => {
-  if (msg.fromMe) return;
-
+client.on("message_create", async (msg) => {
   const chat = await msg.getChat();
   const contact = await msg.getContact();
 
@@ -47,9 +45,11 @@ client.on("message", async (msg) => {
   if (!msg.body || msg.body.trim().length === 0) return;
 
   const rowId = storeMessage(messageData);
-  console.log(`[MSG] ${messageData.chatName} | ${messageData.senderName}: ${msg.body.slice(0, 80)}`);
+  const direction = msg.fromMe ? "→" : "←";
+  console.log(`[MSG] ${direction} ${messageData.chatName} | ${messageData.senderName}: ${msg.body.slice(0, 80)}`);
 
   const intent = await parseIntent(messageData);
+  console.log(`[Intent] ${JSON.stringify(intent)}`);
 
   if (intent.type === "none") return;
 

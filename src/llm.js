@@ -6,7 +6,7 @@ const client = new AnthropicVertex({
   region: config.gcpRegion,
 });
 
-const MODEL = "claude-opus-4-8";
+const MODEL = "claude-opus-4-6";
 
 const INTENT_PROMPT = `Analyze this WhatsApp message (may be Hebrew, English, or mixed).
 Return ONLY valid JSON, no markdown:
@@ -42,8 +42,11 @@ export async function parseIntent(msg) {
       messages: [{ role: "user", content: prompt }],
     });
 
-    const text = response.content.find((b) => b.type === "text")?.text;
+    let text = response.content.find((b) => b.type === "text")?.text;
     if (!text) return { type: "none" };
+
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonMatch) text = jsonMatch[1].trim();
 
     return JSON.parse(text);
   } catch (err) {

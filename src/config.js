@@ -1,4 +1,5 @@
 import { readFileSync, existsSync } from "fs";
+import { execSync } from "child_process";
 import { resolve } from "path";
 
 const envPath = resolve(process.cwd(), ".env");
@@ -23,6 +24,9 @@ export const config = {
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
   googleCalendarId: process.env.GOOGLE_CALENDAR_ID || "primary",
 
-  gcpProject: process.env.GOOGLE_CLOUD_PROJECT,
+  gcpProject: process.env.GOOGLE_CLOUD_PROJECT || (() => {
+    try { return execSync("gcloud config get-value project", { encoding: "utf-8" }).trim(); }
+    catch { return undefined; }
+  })(),
   gcpRegion: process.env.GOOGLE_CLOUD_REGION || "us-east5",
 };
