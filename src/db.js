@@ -25,6 +25,16 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
   CREATE INDEX IF NOT EXISTS idx_messages_chat ON messages(chat_id);
+
+  CREATE TABLE IF NOT EXISTS reminders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    due_at INTEGER NOT NULL,
+    chat_id TEXT NOT NULL,
+    fired INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders(due_at);
 `);
 
 const insertStmt = db.prepare(`
@@ -76,6 +86,30 @@ const lastTimestampStmt = db.prepare(`
 export function getLastTimestamp() {
   const row = lastTimestampStmt.get();
   return row?.ts || 0;
+}
+
+const insertReminderStmt = db.prepare(`
+  INSERT INTO reminders (title, due_at, chat_id) VALUES (@title, @due_at, @chat_id)
+`);
+
+const dueRemindersStmt = db.prepare(`
+  SELECT * FROM reminders WHERE fired = 0 AND due_at <= @now
+`);
+
+const fireReminderStmt = db.prepare(`
+  UPDATE reminders SET fired = 1 WHERE id = @id
+`);
+
+export function addReminder(title, dueAt, chatId) {
+  insertReminderStmt.run({ title, due_at: Math.floor(dueAt / 1000), chat_id: chatId });
+}
+
+export function getDueReminders() {
+  return dueRemindersStmt.all({ now: Math.floor(Date.now() / 1000) });
+}
+
+export function markReminderFired(id) {
+  fireReminderStmt.run({ id });
 }
 
 export function close() {

@@ -4,7 +4,7 @@ import qrcode from "qrcode-terminal";
 import { initCalendar } from "./calendar.js";
 import { notify } from "./notify.js";
 import { initDigest } from "./digest.js";
-import { getLastTimestamp, storeMessage, close as closeDb } from "./db.js";
+import { getLastTimestamp, getDueReminders, markReminderFired, close as closeDb } from "./db.js";
 import { handleMessage } from "./handler.js";
 
 const client = new Client({
@@ -25,6 +25,7 @@ client.on("ready", async () => {
   if (calendarReady) console.log("[Calendar] Ready");
 
   initDigest(client);
+  startReminderChecker();
 
   await processMissedMessages();
 });
@@ -56,6 +57,23 @@ async function processMissedMessages() {
   }
 
   console.log(`[Startup] Processed ${processed} missed messages`);
+}
+
+function startReminderChecker() {
+  setInterval(async () => {
+    const due = getDueReminders();
+    for (const r of due) {
+      try {
+        await client.sendMessage(r.chat_id, `⏰ תזכורת: ${r.title}`);
+        markReminderFired(r.id);
+        notify("⏰ Reminder", r.title);
+        console.log(`[Reminder] Fired: ${r.title}`);
+      } catch (err) {
+        console.error(`[Reminder] Failed to send: ${err.message}`);
+      }
+    }
+  }, 60_000);
+  console.log("[Reminders] Checker started (every 60s)");
 }
 
 client.on("message_create", (msg) => handleMessage(msg, client));

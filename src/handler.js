@@ -1,5 +1,5 @@
 import { config } from "./config.js";
-import { storeMessage, updateAction } from "./db.js";
+import { storeMessage, updateAction, addReminder } from "./db.js";
 import { parseIntent } from "./llm.js";
 import { createEvent, getEvents } from "./calendar.js";
 import { notify } from "./notify.js";
@@ -69,14 +69,14 @@ export async function handleMessage(msg, client) {
     }
 
     if (intent.type === "reminder" && intent.datetime) {
-      const delay = new Date(intent.datetime).getTime() - Date.now();
-      if (delay > 0) {
+      const dueAt = new Date(intent.datetime).getTime();
+      if (dueAt > Date.now()) {
         updateAction(rowId, "reminder", intent);
+        addReminder(intent.title, dueAt, messageData.chatId);
         const timeStr = new Date(intent.datetime).toLocaleString("he-IL");
-        setTimeout(() => notify("⏰ Reminder", intent.title), delay);
         notify("Reminder Set", `${intent.title} at ${timeStr}`);
         await msg.reply(`⏰ תזכורת נקבעה: ${intent.title}\n🕐 ${timeStr}`);
-        console.log(`[Reply] Reminder confirmation sent`);
+        console.log(`[Reply] Reminder stored for ${timeStr}`);
       }
     }
 
