@@ -1,12 +1,11 @@
 import pkg from "whatsapp-web.js";
 const { Client, LocalAuth } = pkg;
 import qrcode from "qrcode-terminal";
-import { config } from "./config.js";
-import { storeMessage, updateAction, close as closeDb } from "./db.js";
-import { parseIntent } from "./llm.js";
-import { createEvent, initCalendar } from "./calendar.js";
+import { initCalendar } from "./calendar.js";
 import { notify } from "./notify.js";
 import { initDigest } from "./digest.js";
+import { getLastTimestamp, storeMessage, close as closeDb } from "./db.js";
+import { handleMessage } from "./handler.js";
 
 const client = new Client({
   authStrategy: new LocalAuth(),
@@ -26,77 +25,40 @@ client.on("ready", async () => {
   if (calendarReady) console.log("[Calendar] Ready");
 
   initDigest(client);
+
+  await processMissedMessages();
 });
 
-client.on("message_create", async (msg) => {
-  try {
-    const chat = await msg.getChat();
-
-    let senderName = "Me";
-    let senderId = msg.from;
-    if (!msg.fromMe) {
-      try {
-        const contact = await msg.getContact();
-        senderId = contact.id._serialized;
-        senderName = contact.pushname || contact.name || contact.id.user;
-      } catch { /* device WID lookup can fail for own messages */ }
-    }
-
-    const messageData = {
-      chatId: chat.id._serialized,
-      chatName: chat.name || chat.id.user,
-      sender: senderId,
-      senderName,
-      body: msg.body,
-      timestamp: msg.timestamp,
-      isGroup: chat.isGroup,
-    };
-
-  if (!msg.body || msg.body.trim().length === 0) return;
-  if (msg.fromMe && (msg.body.startsWith("📅") || msg.body.startsWith("⏰") || msg.body.startsWith("📋"))) return;
-
-  const rowId = storeMessage(messageData);
-  const direction = msg.fromMe ? "→" : "←";
-  console.log(`[MSG] ${direction} ${messageData.chatName} | ${messageData.senderName}: ${msg.body.slice(0, 80)}`);
-
-  const intent = await parseIntent(messageData);
-  console.log(`[Intent] ${JSON.stringify(intent)}`);
-
-  if (intent.type === "none") return;
-
-  if (intent.confidence < config.confidenceThreshold) {
-    console.log(`[Intent] Low confidence (${intent.confidence}): ${intent.type} — skipping`);
+async function processMissedMessages() {
+  const lastTs = getLastTimestamp();
+  if (!lastTs) {
+    console.log("[Startup] No message history — skipping missed message scan");
     return;
   }
 
-  if (intent.type === "calendar_event" && intent.datetime) {
-    const event = await createEvent(intent.title, intent.datetime, intent.duration_minutes);
-    if (event) {
-      updateAction(rowId, "calendar_event", intent);
-      const timeStr = new Date(intent.datetime).toLocaleString("he-IL");
-      notify("📅 Calendar Event Created", `${intent.title}\n${timeStr}`);
-      await msg.reply(`📅 נוסף ליומן: ${intent.title}\n🕐 ${timeStr}`);
-      console.log(`[Reply] Calendar confirmation sent`);
+  console.log("[Startup] Scanning for missed messages...");
+  let processed = 0;
+
+  try {
+    const chats = await client.getChats();
+    for (const chat of chats) {
+      const messages = await chat.fetchMessages({ limit: 50 });
+      for (const msg of messages) {
+        if (msg.timestamp <= lastTs) continue;
+        if (!msg.body || msg.body.trim().length === 0) continue;
+
+        await handleMessage(msg, client);
+        processed++;
+      }
     }
+  } catch (err) {
+    console.error("[Startup] Error scanning missed messages:", err.message);
   }
 
-  if (intent.type === "reminder" && intent.datetime) {
-    const delay = new Date(intent.datetime).getTime() - Date.now();
-    if (delay > 0) {
-      updateAction(rowId, "reminder", intent);
-      const timeStr = new Date(intent.datetime).toLocaleString("he-IL");
-      setTimeout(() => {
-        notify("⏰ Reminder", intent.title);
-      }, delay);
-      notify("Reminder Set", `${intent.title} at ${timeStr}`);
-      await msg.reply(`⏰ תזכורת נקבעה: ${intent.title}\n🕐 ${timeStr}`);
-      console.log(`[Reply] Reminder confirmation sent`);
-    }
-  }
-  } catch (err) {
-    console.error("[Handler] Error processing message:", err.message);
-  }
-});
+  console.log(`[Startup] Processed ${processed} missed messages`);
+}
+
+client.on("message_create", (msg) => handleMessage(msg, client));
 
 client.on("disconnected", (reason) => {
   console.warn("[WA] Disconnected:", reason);

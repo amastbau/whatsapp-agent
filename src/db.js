@@ -69,6 +69,15 @@ export function getRecentMessages(hoursAgo = 24) {
   return recentMessagesStmt.all({ since });
 }
 
+const lastTimestampStmt = db.prepare(`
+  SELECT MAX(timestamp) as ts FROM messages
+`);
+
+export function getLastTimestamp() {
+  const row = lastTimestampStmt.get();
+  return row?.ts || 0;
+}
+
 export function close() {
   db.close();
 }
