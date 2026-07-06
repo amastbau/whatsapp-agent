@@ -29,4 +29,6 @@ export const config = {
     catch { return undefined; }
   })(),
   gcpRegion: process.env.GOOGLE_CLOUD_REGION || "us-east5",
+
+  blockedChats: (process.env.BLOCKED_CHATS || "").split(",").map((s) => s.trim()).filter(Boolean),
 };

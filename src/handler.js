@@ -36,6 +36,8 @@ export async function handleMessage(msg, client) {
     if (!msg.body || msg.body.trim().length === 0) return;
     if (msg.fromMe && BOT_PREFIXES.some((p) => msg.body.startsWith(p))) return;
 
+    if (config.blockedChats.some((b) => messageData.chatName?.includes(b))) return;
+
     const rowId = storeMessage(messageData);
     const direction = msg.fromMe ? "→" : "←";
     console.log(`[MSG] ${direction} ${messageData.chatName} | ${messageData.senderName}: ${msg.body.slice(0, 80)}`);
