@@ -5,7 +5,7 @@ import { URL } from "url";
 import { config } from "./config.js";
 
 const TOKEN_PATH = "./google-token.json";
-const SCOPES = ["https://www.googleapis.com/auth/calendar.events"];
+const SCOPES = ["https://www.googleapis.com/auth/calendar.events", "https://www.googleapis.com/auth/calendar.readonly"];
 
 let auth = null;
 
@@ -90,5 +90,41 @@ export async function createEvent(title, startTime, durationMinutes = 60) {
   } catch (err) {
     console.error("[Calendar] Create failed:", err.message);
     return null;
+  }
+}
+
+export async function getEvents(daysAhead = 1) {
+  if (!auth) return null;
+
+  const calendar = google.calendar({ version: "v3", auth });
+  const now = new Date();
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  if (daysAhead > 0) start.setDate(start.getDate() + (daysAhead === 1 ? 1 : 0));
+  const end = new Date(start);
+  end.setDate(end.getDate() + (daysAhead === 0 ? 1 : daysAhead));
+
+  try {
+    const res = await calendar.events.list({
+      calendarId: config.googleCalendarId,
+      timeMin: start.toISOString(),
+      timeMax: end.toISOString(),
+      singleEvents: true,
+      orderBy: "startTime",
+    });
+
+    const events = res.data.items || [];
+    if (events.length === 0) return "אין פגישות.";
+
+    return events.map((e) => {
+      const t = new Date(e.start.dateTime || e.start.date);
+      const time = e.start.dateTime
+        ? t.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })
+        : "כל היום";
+      return `• ${time} — ${e.summary}`;
+    }).join("\n");
+  } catch (err) {
+    console.error("[Calendar] Query failed:", err.message);
+    return "שגיאה בקריאת היומן.";
   }
 }
