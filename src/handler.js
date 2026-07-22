@@ -8,6 +8,11 @@ import { runCommand } from "./commands.js";
 
 const BOT_PREFIXES = ["📅", "⏰", "📋", "🖥️"];
 
+async function sendToMe(client, text) {
+  const me = client.info.wid._serialized;
+  await client.sendMessage(me, text);
+}
+
 export async function handleMessage(msg, client) {
   try {
     const chat = await msg.getChat();
@@ -44,7 +49,7 @@ export async function handleMessage(msg, client) {
 
     if (msg.fromMe && /^(digest|סיכום|סכם|summary)/i.test(msg.body.trim())) {
       console.log("[Digest] Manual digest triggered");
-      await msg.reply("📋 מכין סיכום יומי...");
+      await sendToMe(client, "📋 מכין סיכום יומי...");
       await runDigest();
       return;
     }
@@ -65,7 +70,8 @@ export async function handleMessage(msg, client) {
         updateAction(rowId, "calendar_event", intent);
         const timeStr = new Date(intent.datetime).toLocaleString("he-IL");
         notify("📅 Calendar Event Created", `${intent.title}\n${timeStr}`);
-        await msg.reply(`📅 נוסף ליומן: ${intent.title}\n🕐 ${timeStr}`);
+        const src = msg.fromMe ? "" : `\n💬 ${messageData.chatName}`;
+        await sendToMe(client, `📅 נוסף ליומן: ${intent.title}\n🕐 ${timeStr}${src}`);
         console.log(`[Reply] Calendar confirmation sent`);
       }
     }
@@ -77,21 +83,30 @@ export async function handleMessage(msg, client) {
         addReminder(intent.title, dueAt, messageData.chatId);
         const timeStr = new Date(intent.datetime).toLocaleString("he-IL");
         notify("Reminder Set", `${intent.title} at ${timeStr}`);
-        await msg.reply(`⏰ תזכורת נקבעה: ${intent.title}\n🕐 ${timeStr}`);
+        const src = msg.fromMe ? "" : `\n💬 ${messageData.chatName}`;
+        await sendToMe(client, `⏰ תזכורת נקבעה: ${intent.title}\n🕐 ${timeStr}${src}`);
         console.log(`[Reply] Reminder stored for ${timeStr}`);
       }
     }
 
+    const msgAge = Date.now() - msg.timestamp * 1000;
+    const isStale = msgAge > 60_000;
+
     if (intent.type === "calendar_query") {
+      if (isStale) return;
       if (!msg.fromMe) return;
       const days = intent.days_ahead ?? 1;
       const label = days === 0 ? "היום" : days === 1 ? "מחר" : `${days} ימים קרובים`;
       const events = await getEvents(days);
-      await msg.reply(`📅 פגישות ${label}:\n\n${events}`);
+      await sendToMe(client, `📅 פגישות ${label}:\n\n${events}`);
       console.log(`[Calendar] Query: ${days} days ahead`);
     }
 
     if (intent.type === "command" && intent.command) {
+      if (isStale) {
+        console.log(`[Command] Skipped stale command (${Math.round(msgAge / 1000)}s old)`);
+        return;
+      }
       if (!msg.fromMe) {
         console.log(`[Command] Rejected: command from non-self message`);
         return;
@@ -99,7 +114,7 @@ export async function handleMessage(msg, client) {
       console.log(`[Command] Running: ${intent.command}`);
       const result = await runCommand(intent.command);
       const status = result.success ? "✅" : "❌";
-      await msg.reply(`🖥️ ${intent.description || intent.command}\n${status} ${result.output.slice(0, 500)}`);
+      await sendToMe(client, `🖥️ ${intent.description || intent.command}\n${status} ${result.output.slice(0, 500)}`);
       console.log(`[Command] ${status} ${result.output.slice(0, 100)}`);
     }
   } catch (err) {
