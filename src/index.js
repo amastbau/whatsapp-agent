@@ -31,32 +31,10 @@ client.on("ready", async () => {
 });
 
 async function processMissedMessages() {
-  const lastTs = getLastTimestamp();
-  if (!lastTs) {
-    console.log("[Startup] No message history — skipping missed message scan");
-    return;
-  }
-
-  console.log("[Startup] Scanning for missed messages...");
-  let processed = 0;
-
-  try {
-    const chats = await client.getChats();
-    for (const chat of chats) {
-      const messages = await chat.fetchMessages({ limit: 50 });
-      for (const msg of messages) {
-        if (msg.timestamp <= lastTs) continue;
-        if (!msg.body || msg.body.trim().length === 0) continue;
-
-        await handleMessage(msg, client);
-        processed++;
-      }
-    }
-  } catch (err) {
-    console.error("[Startup] Error scanning missed messages:", err.message);
-  }
-
-  console.log(`[Startup] Processed ${processed} missed messages`);
+  // Disabled: client.getChats() uses page.evaluate which is broken
+  // in whatsapp-web.js due to WhatsApp Web internal changes (July 2026).
+  // Live messages via message_create event still work with raw msg properties.
+  console.log("[Startup] Missed message scan disabled (getChats API broken)");
 }
 
 function startReminderChecker() {

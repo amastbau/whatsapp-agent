@@ -76,10 +76,16 @@ export async function parseIntent(msg) {
     let text = response.content.find((b) => b.type === "text")?.text;
     if (!text) return { type: "none" };
 
-    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (jsonMatch) text = jsonMatch[1].trim();
+    const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fenceMatch) text = fenceMatch[1].trim();
 
-    return JSON.parse(text);
+    try {
+      return JSON.parse(text);
+    } catch {
+      const objectMatch = text.match(/\{[\s\S]*\}/);
+      if (objectMatch) return JSON.parse(objectMatch[0]);
+      return { type: "none" };
+    }
   } catch (err) {
     console.error("[LLM] Intent parse failed:", err.message);
     return { type: "none" };

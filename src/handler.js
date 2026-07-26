@@ -13,39 +13,41 @@ async function sendToMe(client, text) {
   await client.sendMessage(me, text);
 }
 
+function extractChatName(msg) {
+  // msg._data has notifyName (sender's push name) and chat name info
+  const data = msg._data || {};
+  if (data.notifyName) return data.notifyName;
+  // Fall back to parsing the chat ID
+  const chatId = msg.from || "";
+  return chatId.replace(/@.*/, "");
+}
+
 export async function handleMessage(msg, client) {
   try {
-    const chat = await msg.getChat();
-
-    let senderName = "Me";
-    let senderId = msg.from;
-    if (!msg.fromMe) {
-      try {
-        const contact = await msg.getContact();
-        senderId = contact.id._serialized;
-        senderName = contact.pushname || contact.name || contact.id.user;
-      } catch {}
-    }
-
-    const messageData = {
-      chatId: chat.id._serialized,
-      chatName: chat.name || chat.id.user,
-      sender: senderId,
-      senderName,
-      body: msg.body,
-      timestamp: msg.timestamp,
-      isGroup: chat.isGroup,
-      fromMe: msg.fromMe,
-    };
-
     if (!msg.body || msg.body.trim().length === 0) return;
     if (msg.fromMe && BOT_PREFIXES.some((p) => msg.body.startsWith(p))) return;
 
-    if (config.blockedChats.some((b) => messageData.chatName?.includes(b))) return;
+    const chatId = msg.fromMe ? msg.to : msg.from;
+    const isGroup = chatId.endsWith("@g.us");
+    const senderName = msg.fromMe ? "Me" : (msg._data?.notifyName || msg.author || chatId.replace(/@.*/, ""));
+    const chatName = extractChatName(msg);
+
+    if (config.blockedChats.some((b) => chatName?.includes(b))) return;
+
+    const messageData = {
+      chatId,
+      chatName,
+      sender: msg.fromMe ? client.info.wid._serialized : (msg.author || msg.from),
+      senderName,
+      body: msg.body,
+      timestamp: msg.timestamp,
+      isGroup,
+      fromMe: msg.fromMe,
+    };
 
     const rowId = storeMessage(messageData);
     const direction = msg.fromMe ? "→" : "←";
-    console.log(`[MSG] ${direction} ${messageData.chatName} | ${messageData.senderName}: ${msg.body.slice(0, 80)}`);
+    console.log(`[MSG] ${direction} ${chatName} | ${senderName}: ${msg.body.slice(0, 80)}`);
 
     if (msg.fromMe && /^(digest|סיכום|סכם|summary)/i.test(msg.body.trim())) {
       console.log("[Digest] Manual digest triggered");
@@ -70,7 +72,7 @@ export async function handleMessage(msg, client) {
         updateAction(rowId, "calendar_event", intent);
         const timeStr = new Date(intent.datetime).toLocaleString("he-IL");
         notify("📅 Calendar Event Created", `${intent.title}\n${timeStr}`);
-        const src = msg.fromMe ? "" : `\n💬 ${messageData.chatName}`;
+        const src = msg.fromMe ? "" : `\n💬 ${chatName}`;
         await sendToMe(client, `📅 נוסף ליומן: ${intent.title}\n🕐 ${timeStr}${src}`);
         console.log(`[Reply] Calendar confirmation sent`);
       }
@@ -80,10 +82,10 @@ export async function handleMessage(msg, client) {
       const dueAt = new Date(intent.datetime).getTime();
       if (dueAt > Date.now()) {
         updateAction(rowId, "reminder", intent);
-        addReminder(intent.title, dueAt, messageData.chatId);
+        addReminder(intent.title, dueAt, chatId);
         const timeStr = new Date(intent.datetime).toLocaleString("he-IL");
         notify("Reminder Set", `${intent.title} at ${timeStr}`);
-        const src = msg.fromMe ? "" : `\n💬 ${messageData.chatName}`;
+        const src = msg.fromMe ? "" : `\n💬 ${chatName}`;
         await sendToMe(client, `⏰ תזכורת נקבעה: ${intent.title}\n🕐 ${timeStr}${src}`);
         console.log(`[Reply] Reminder stored for ${timeStr}`);
       }
@@ -118,6 +120,6 @@ export async function handleMessage(msg, client) {
       console.log(`[Command] ${status} ${result.output.slice(0, 100)}`);
     }
   } catch (err) {
-    console.error("[Handler] Error processing message:", err.message);
+    console.error("[Handler] Error processing message:", err.message, err.stack);
   }
 }
